@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Bill Drafter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@400;500;600&display=swap">
+<style>
+/* Layout: two panes. Left is the register of saved bills (search, sort, stage filter).
+   Right is the bill, laid out like the Prompt 10.5pt A4 template, with a Draft / Preview toggle. */
+:root {
+  --bg: #ECEFEC;
+  --surface: #F6F8F5;
+  --raised: #FFFFFF;
+  --band: #E1E6E1;
+  --fg: #1B2130;
+  --muted: #596173;
+  --line: #D0D6D0;
+  --accent: #7B1E2E;
+  --accent-fg: #FFFFFF;
+  --st-neutral: #667084;
+  --st-info: #2D6CA2;
+  --st-prog: #9A6A0C;
+  --st-good: #2A7A50;
+  --st-bad: #AE3838;
+  --font-display: 'Prompt', 'Noto Sans Thai', system-ui, sans-serif;
+  --font-body: 'Noto Sans Thai', 'Prompt', system-ui, sans-serif;
+  --radius: 6px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151D; --surface: #171C27; --raised: #1D2331; --band: #232A3B;
+    --fg: #E6E8EE; --muted: #98A0B1; --line: #2C3445;
+    --accent: #E58B97; --accent-fg: #1F0E12;
+    --st-neutral: #98A0B1; --st-info: #7FB2DD; --st-prog: #E0B35A; --st-good: #6CC596; --st-bad: #F08A8A;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151D; --surface: #171C27; --raised: #1D2331; --band: #232A3B;
+  --fg: #E6E8EE; --muted: #98A0B1; --line: #2C3445;
+  --accent: #E58B97; --accent-fg: #1F0E12;
+  --st-neutral: #98A0B1; --st-info: #7FB2DD; --st-prog: #E0B35A; --st-good: #6CC596; --st-bad: #F08A8A;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.65; }
+h1, h2, h3, p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.muted { color: var(--muted); }
+.small { font-size: .84rem; }
+
+.app { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); height: 100%; }
+.pane { min-width: 0; min-height: 0; }
+
+/* sign in */
+.auth { min-height: 100%; display: grid; place-items: center; padding: 24px 16px; }
+.auth-card { width: min(100%, 24rem); display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
+.auth-card h1 { font-family: var(--font-display); font-weight: 600; font-size: 1.4rem; }
+.auth-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.msg { min-height: 1.4em; font-size: .86rem; color: var(--muted); }
+.msg.err { color: var(--st-bad); }
+
+/* register */
+.list-pane { display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--line); overflow: hidden; }
+.list-head { display: grid; gap: 10px; padding: 16px; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.brand h1 { font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; line-height: 1.4; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cards { flex: 1; overflow: auto; padding: 12px 16px; display: grid; gap: 8px; align-content: start; }
+.store-note { padding: 10px 16px; font-size: .8rem; color: var(--muted); border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; justify-content: space-between; }
+.store-note span { min-width: 0; overflow-wrap: anywhere; }
+.empty { color: var(--muted); font-size: .92rem; padding: 8px 0; }
+
+.card { display: block; width: 100%; text-align: left; background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; cursor: pointer; }
+.card:hover { border-color: var(--muted); }
+.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.card-title { font-family: var(--font-display); font-weight: 500; font-size: .95rem; line-height: 1.6; margin-bottom: 6px; overflow-wrap: anywhere; }
+.card-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: .82rem; color: var(--muted); }
+
+.pill { --tone: var(--st-neutral); display: inline-block; padding: 0 9px; border-radius: 999px; font-size: .78rem; font-weight: 600; line-height: 1.7; color: color-mix(in srgb, var(--tone) 80%, var(--fg)); background: color-mix(in srgb, var(--tone) 15%, var(--raised)); }
+.pill[data-tone="info"] { --tone: var(--st-info); }
+.pill[data-tone="prog"] { --tone: var(--st-prog); }
+.pill[data-tone="good"] { --tone: var(--st-good); }
+.pill[data-tone="bad"] { --tone: var(--st-bad); }
+
+/* controls */
+.btn { font-size: .9rem; padding: 6px 12px; border: 1px solid var(--line); background: var(--raised); border-radius: var(--radius); cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.btn.ghost { background: transparent; }
+.btn.link { border: 0; background: none; color: var(--accent); padding: 0; font-size: .8rem; text-decoration: underline; }
+.btn.armed { border-color: var(--st-bad); color: var(--st-bad); }
+.btn[disabled] { opacity: .4; cursor: default; }
+.ico { padding: 4px 9px; min-width: 2rem; }
+.inp { width: 100%; min-width: 0; padding: 7px 10px; background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius); }
+select.inp { padding-right: 4px; }
+textarea.inp { resize: none; overflow: hidden; line-height: 1.8; min-height: 2.6rem; display: block; }
+.check { display: flex; align-items: flex-start; gap: 8px; }
+.check input { margin-top: .45em; }
+
+/* editor */
+.edit-pane { overflow: auto; }
+.ed-head { position: sticky; top: 0; z-index: 3; background: var(--bg); border-bottom: 1px solid var(--line); padding: 12px 16px 0; display: grid; gap: 8px; }
+.ed-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.back { display: none; flex: none; }
+.hdr-title { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; line-height: 1.6; overflow-wrap: anywhere; min-width: 0; }
+.ed-bar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 6px 12px; }
+.bar-right { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding-bottom: 8px; }
+.bar-right select { width: auto; max-width: 12rem; padding: 4px 6px; }
+.tabs { display: flex; gap: 2px; }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 6px 12px; cursor: pointer; color: var(--muted); margin-bottom: -1px; }
+.tab[aria-selected="true"] { color: var(--fg); border-color: var(--accent); font-weight: 600; }
+
+.ed-body, .ed-fb { max-width: 52rem; margin: 0 auto; padding: 16px; }
+.ed-body { display: grid; gap: 20px; }
+.group { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 14px; }
+.group > summary { cursor: pointer; }
+.group-title { font-family: var(--font-display); font-size: 1rem; font-weight: 600; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.group-title .en { font-family: var(--font-body); font-size: .74rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: 12px; }
+.field { display: grid; gap: 4px; min-width: 0; align-content: start; }
+.lbl { font-size: .8rem; font-weight: 600; letter-spacing: .02em; color: var(--muted); }
+.hint { font-size: .78rem; color: var(--muted); }
+.lbl-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; align-items: baseline; }
+.reason-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; }
+.reason-row .pre { font-size: .9rem; color: var(--muted); }
+.reason-row select { width: auto; }
+
+/* body of the bill */
+.body-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; }
+.items { display: grid; }
+.row { display: grid; gap: 8px 10px; align-items: start; }
+.sec { grid-template-columns: 4.8rem minmax(0, 1fr) auto; grid-template-areas: "no text ctl"; padding: 10px 0; border-bottom: 1px dotted var(--line); }
+.sec-no { grid-area: no; font-family: var(--font-display); font-weight: 600; color: var(--accent); padding-top: 7px; white-space: nowrap; }
+.sec-text { grid-area: text; min-width: 0; display: grid; gap: 4px; }
+.auto { font-size: .76rem; color: var(--muted); }
+.div { grid-template-columns: auto 8.6rem minmax(0, 1fr) auto; grid-template-areas: "no level name ctl"; align-items: center; background: var(--band); border-radius: var(--radius); padding: 8px 10px; margin: 20px 0 4px; }
+.div-no { grid-area: no; font-family: var(--font-display); font-weight: 600; white-space: nowrap; }
+.div-level { grid-area: level; }
+.div-name { grid-area: name; min-width: 0; }
+.ctl { grid-area: ctl; display: flex; gap: 4px; }
+.addbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+/* preview: A4 proportions, Prompt 10.5pt, margins 3 / 2 / 2 / 3 cm like the Word template */
+.paper { max-width: 21cm; margin: 0 auto; background: var(--raised); border: 1px solid var(--line);
+  padding: clamp(18px, 5vw, 3cm) clamp(14px, 3.5vw, 2cm) clamp(18px, 3.5vw, 2cm) clamp(18px, 5vw, 3cm);
+  font-family: var(--font-display); font-size: 10.5pt; line-height: 1.8; }
+.paper p, .paper div { margin: 0; overflow-wrap: anywhere; }
+.p-center { text-align: center; }
+.p-blank { height: 1.8em; }
+.p-dist { text-align: justify; text-justify: inter-character; text-indent: 2.5cm; }
+.p-sec { text-indent: 2.5cm; white-space: pre-wrap; }
+.p-div { text-align: center; font-weight: 600; }
+.p-sign { width: min(14rem, 100%); margin: 0 0 0 auto; text-align: center; }
+.p-remark { text-indent: 2.5cm; text-align: justify; text-justify: inter-character; }
+
+.toast { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 16px; border-radius: 999px; font-size: .9rem; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 10; max-width: calc(100% - 32px); text-align: center; }
+.toast.on { opacity: 1; }
+
+@media (max-width: 859px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .app[data-view="list"] .edit-pane { display: none; }
+  .app[data-view="edit"] .list-pane { display: none; }
+  .back { display: inline-block; }
+}
+@media (max-width: 640px) {
+  .sec { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "no ctl" "text text"; }
+  .div { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "no ctl" "level level" "name name"; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="auth" id="auth" hidden>
+  <form class="auth-card" id="auth-form">
+    <h1>Bill Drafter</h1>
+    <p class="muted small">ร่างพระราชบัญญัติ · sign in to open your saved bills</p>
+    <label class="lbl" for="a-email">Email</label>
+    <input id="a-email" class="inp" type="email" autocomplete="username" required>
+    <label class="lbl" for="a-pass">Password</label>
+    <input id="a-pass" class="inp" type="password" autocomplete="current-password" minlength="8" required>
+    <p class="msg" id="a-msg" role="alert"></p>
+    <div class="auth-actions">
+      <button class="btn primary" type="submit" id="a-in">Sign in</button>
+      <button class="btn" type="button" id="a-up">Create account</button>
+    </div>
+  </form>
+</div>
+
+<div class="app" id="app" data-view="list" hidden>
+  <aside class="pane list-pane" aria-label="Saved bills">
+    <div class="list-head">
+      <div class="brand">
+        <div>
+          <h1>Bill Drafter</h1>
+          <p class="muted small">ร่างพระราชบัญญัติ</p>
+        </div>
+        <button id="btn-new" class="btn primary" type="button">New bill</button>
+      </div>
+      <input id="q" class="inp" type="search" placeholder="Search title, proposer, text" aria-label="Search bills">
+      <div class="two">
+        <select id="sort" class="inp" aria-label="Sort bills">
+          <option value="updated">Last edited</option>
+          <option value="title">Title (ก–ฮ)</option>
+          <option value="stage">Stage in process</option>
+          <option value="year">Year (พ.ศ.)</option>
+          <option value="sections">Most sections</option>
+        </select>
+        <select id="filter" class="inp" aria-label="Filter by stage"></select>
+      </div>
+      <p id="count" class="muted small"></p>
+    </div>
+    <div id="cards" class="cards"></div>
+    <div class="store-note"><span id="store-note">Connecting…</span><button id="btn-out" class="btn link" type="button" hidden>Sign out</button></div>
+  </aside>
+
+  <main class="pane edit-pane" id="editor">
+    <header class="ed-head">
+      <div class="ed-top">
+        <button id="btn-back" class="btn ghost back" type="button">&larr; Bills</button>
+        <h2 id="hdr-title" class="hdr-title"></h2>
+      </div>
+      <div class="ed-bar">
+        <div class="tabs" role="tablist" aria-label="View">
+          <button id="tab-edit" class="tab" role="tab" type="button" aria-selected="true">Draft</button>
+          <button id="tab-preview" class="tab" role="tab" type="button" aria-selected="false">Preview</button>
+        </div>
+        <div class="bar-right">
+          <label class="sr" for="status">Stage in process</label>
+          <select id="status" class="inp"></select>
+          <span id="save-state" class="muted small" aria-live="polite"></span>
+          <button id="btn-docx" class="btn primary" type="button">Download Word</button>
+          <button id="btn-copy" class="btn" type="button">Copy text</button>
+          <button id="btn-dup" class="btn" type="button">Duplicate</button>
+          <button id="btn-del" class="btn" type="button">Delete</button>
+        </div>
+      </div>
+    </header>
+
+    <div id="copy-fb" class="ed-fb" hidden>
+      <div class="group">
+        <label class="lbl" for="copy-ta">Select all and copy</label>
+        <textarea id="copy-ta" class="inp" rows="8" readonly></textarea>
+        <div><button id="copy-close" class="btn" type="button">Close</button></div>
+      </div>
+    </div>
+
+    <div id="edit-body" class="ed-body">
+      <section class="group" id="g-details"></section>
+      <details class="group" id="g-preamble" open></details>
+      <section id="g-body">
+        <div class="body-head">
+          <h3 class="group-title">Body <span class="en">เนื้อหา</span></h3>
+          <p class="hint">Sections run in order to the end of the bill. A blank line inside a section starts a new paragraph.</p>
+        </div>
+        <div id="items" class="items"></div>
+        <div class="addbar">
+          <button id="add-sec" class="btn" type="button">+ Section (มาตรา)</button>
+          <button id="add-div" class="btn" type="button">+ Division (หมวด)</button>
+          <button id="add-sub" class="btn" type="button">+ Subdivision (ส่วน)</button>
+          <button id="add-trans" class="btn" type="button">+ Transitional (บทเฉพาะกาล)</button>
+        </div>
+      </section>
+      <section class="group" id="g-closing"></section>
+    </div>
+
+    <div id="preview-body" class="ed-body" hidden>
+      <article class="paper" id="paper"></article>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+<script src="config.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- reference data ---------- */
+  var THD = '๐๑๒๓๔๕๖๗๘๙';
+  var STATUSES = [
+    { k: 'draft', th: 'ร่าง', en: 'Draft', tone: 'neutral' },
+    { k: 'submitted', th: 'เสนอแล้ว', en: 'Submitted', tone: 'info' },
+    { k: 'r1', th: 'วาระที่ ๑', en: '1st reading', tone: 'prog' },
+    { k: 'cmte', th: 'ชั้นกรรมาธิการ', en: 'Committee', tone: 'prog' },
+    { k: 'r2', th: 'วาระที่ ๒', en: '2nd reading', tone: 'prog' },
+    { k: 'r3', th: 'วาระที่ ๓', en: '3rd reading', tone: 'prog' },
+    { k: 'enacted', th: 'ประกาศใช้', en: 'Enacted', tone: 'good' },
+    { k: 'failed', th: 'ตกไป', en: 'Rejected', tone: 'bad' }
+  ];
+  var ST = {};
+  STATUSES.forEach(function (s, i) { ST[s.k] = { k: s.k, th: s.th, en: s.en, tone: s.tone, i: i }; });
+  var LEVELS = ['หมวด', 'ส่วน', 'ภาค', 'บทเฉพาะกาล'];
+  var MODES = ['ให้มี', 'ปรับปรุง', 'ยกเลิก'];
+  var D50 = '..............................................................';
+  var D44 = '............................................';
+  var D27 = '...........................';
+  var DL = '..............................................................................................................................................';
+  var COMMON_PROCLAIM = 'พระบาทสมเด็จพระ…………………… มีพระบรมราชโองการโปรดเกล้าฯ ให้ประกาศว่า';
+  var COMMON_ENACT = 'จึงทรงพระกรุณาโปรดเกล้าฯ ให้ตราพระราชบัญญัติขึ้นไว้โดยคำแนะนำและยินยอมของรัฐสภา ดังต่อไปนี้';
+  var EFFECT = 'พระราชบัญญัตินี้ให้ใช้บังคับ';
+
+  /* ---------- helpers ---------- */
+  function $(s, r) { return (r || document).querySelector(s); }
+  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+  function thNum(v) { return String(v).replace(/[0-9]/g, function (d) { return THD.charAt(+d); }); }
+  function arNum(v) { return String(v).replace(/[๐-๙]/g, function (d) { return String(THD.indexOf(d)); }); }
+  function rid() { return Math.random().toString(36).slice(2, 8); }
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    var b = new Uint8Array(16); crypto.getRandomValues(b);
+    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+    var h = Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+    return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+  }
+  function el(tag, props) {
+    var e = document.createElement(tag);
+    if (props) Object.keys(props).forEach(function (k) {
+      var v = props[k];
+      if (v == null || v === false) return;
+      if (k === 'class') e.className = v;
+      else if (k === 'text') e.textContent = v;
+      else if (k.indexOf('on') === 0) e.addEventListener(k.slice(2), v);
+      else if (k === 'value' || k === 'hidden' || k === 'disabled' || k === 'checked') e[k] = v;
+      else e.setAttribute(k, v === true ? '' : v);
+    });
+    for (var i = 2; i < arguments.length; i++) {
+      [].concat(arguments[i]).forEach(function (c) { if (c == null || c === false) return; e.append(c.nodeType ? c : document.createTextNode(c)); });
+    }
+    return e;
+  }
+  function lsGet(key, fallback) { try { var v = localStorage.getItem(key); return v == null ? fallback : JSON.parse(v); } catch (e) { return fallback; } }
+  function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { return false; } }
+  function timeNow() { return new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }); }
+  function dateShort(ms) { return new Date(ms).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }); }
+
+  /* ---------- bill model (follows the Word template) ---------- */
+  function newSec(text, auto) { var s = { id: rid(), kind: 'sec', text: text || '' }; if (auto) s.auto = auto; return s; }
+  function newDiv(level, name) { return { id: rid(), kind: 'div', level: level, name: name || '' }; }
+  function newBill() {
+    var now = Date.now();
+    return {
+      id: uuid(), name: '', year: String(new Date().getFullYear() + 543), proposer: '', status: 'draft', note: '',
+      openLines: '', proclamation: '', reasonMode: MODES[0], reasonTopic: '',
+      rightsOn: true, rightsSections: '', rightsPurpose: '', enact: '',
+      items: [newSec('', 'cite'), newSec(EFFECT + ' '), newSec('')],
+      closingOn: false, csName: '', csRole: 'นายกรัฐมนตรี', remark: '',
+      createdAt: now, updatedAt: now
+    };
+  }
+  function normalize(b) {
+    var out = Object.assign(newBill(), b);
+    if (!Array.isArray(out.items)) out.items = [];
+    out.items.forEach(function (it) { if (!it.id) it.id = rid(); });
+    if (!ST[out.status]) out.status = 'draft';
+    if (MODES.indexOf(out.reasonMode) < 0) out.reasonMode = MODES[0];
+    return out;
+  }
+  function yearTh(b) { var y = arNum((b.year || '').trim()); return y ? thNum(y) : '....'; }
+  function fullTitle(b) { return 'พระราชบัญญัติ' + ((b.name || '').trim() || '……………') + ' พ.ศ. ' + yearTh(b); }
+  function syncAuto(b) {
+    b.items.forEach(function (it) {
+      if (it.auto === 'cite') it.text = 'พระราชบัญญัตินี้เรียกว่า “พระราชบัญญัติ' + ((b.name || '').trim() || D27) + ' พ.ศ. ' + yearTh(b) + '”';
+    });
+  }
+  function secCount(b) { return b.items.filter(function (i) { return i.kind === 'sec'; }).length; }
+  function labelsOf(b) {
+    var part = 0, div = 0, sub = 0, sec = 0;
+    return b.items.map(function (it) {
+      if (it.kind === 'sec') { sec++; return 'มาตรา ' + thNum(sec); }
+      if (it.level === 'ภาค') { part++; div = 0; sub = 0; return 'ภาค ' + thNum(part); }
+      if (it.level === 'หมวด') { div++; sub = 0; return 'หมวด ' + thNum(div); }
+      if (it.level === 'ส่วน') { sub++; return 'ส่วน ' + thNum(sub); }
+      return 'บทเฉพาะกาล';
+    });
+  }
+  function paras(text) {
+    var p = String(text || '').split(/\n\s*\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+    return p.length ? p : [DL];
+  }
+
+  /* One list of blocks drives the preview, the plain text and the Word file. */
+  function blocks(b) {
+    var L = labelsOf(b), o = [];
+    var ctr = function (s) { o.push({ t: 'center', s: s }); };
+    var blank = function () { o.push({ t: 'blank' }); };
+    var dist = function (s) { o.push({ t: 'dist', s: s }); };
+    if (b.status !== 'enacted') ctr('ร่าง');
+    ctr('พระราชบัญญัติ');
+    ctr((b.name || '').trim() || D50);
+    ctr('พ.ศ. ' + yearTh(b));
+    blank(); blank();
+    var lines = (b.openLines || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    (lines.length ? lines : [D44, D44, D44]).forEach(ctr);
+    dist((b.proclamation || '').trim() || DL);
+    blank();
+    dist('โดยที่เป็นการสมควร' + b.reasonMode + 'กฎหมายว่าด้วย ' + ((b.reasonTopic || '').trim() || DL));
+    if (b.rightsOn) {
+      dist('พระราชบัญญัตินี้มีบทบัญญัติบางประการเกี่ยวกับการจำกัดสิทธิและเสรีภาพของบุคคล ซึ่งมาตรา ๓๒ ประกอบกับมาตรา ' +
+        ((b.rightsSections || '').trim() || '............') + ' ของรัฐธรรมนูญแห่งราชอาณาจักรไทย บัญญัติให้กระทำได้โดยอาศัยอำนาจตามบทบัญญัติแห่งกฎหมาย');
+      dist('เหตุผลและความจำเป็นในการจำกัดสิทธิและเสรีภาพของบุคคลตามพระราชบัญญัตินี้ เพื่อ' +
+        ((b.rightsPurpose || '').trim() || '.............................') +
+        ' ซึ่งการตราพระราชบัญญัตินี้สอดคล้องกับเงื่อนไขที่บัญญัติไว้ในมาตรา ๓๒ ของรัฐธรรมนูญแห่งราชอาณาจักรไทยแล้ว');
+    }
+    blank();
+    dist((b.enact || '').trim() || DL);
+    blank();
+    b.items.forEach(function (it, i) {
+      if (it.kind === 'sec') {
+        paras(it.text).forEach(function (p, j) {
+          if (j === 0 && /ให้ใช้บังคับ$/.test(p)) p = p + ' ' + D50;
+          o.push(j === 0 ? { t: 'sec', label: L[i], s: p } : { t: 'cont', s: p });
+        });
+      } else {
+        o.push({ t: 'div', s: L[i], sub: it.level === 'บทเฉพาะกาล' ? '' : ((it.name || '').trim() || '………………') });
+      }
+      blank();
+    });
+    if (b.closingOn) {
+      o.push({ t: 'sign', lines: ['ผู้รับสนองพระบรมราชโองการ', (b.csName || '').trim() || '………………………………', (b.csRole || '').trim()] });
+      blank();
+      o.push({ t: 'remark', s: 'หมายเหตุ :- เหตุผลในการประกาศใช้พระราชบัญญัติฉบับนี้ คือ ' + ((b.remark || '').trim() || DL) });
+    } else {
+      while (o.length && o[o.length - 1].t === 'blank') o.pop();
+    }
+    return o;
+  }
+  function toText(b) {
+    var out = [];
+    blocks(b).forEach(function (k) {
+      if (k.t === 'blank') out.push('');
+      else if (k.t === 'center') out.push(k.s);
+      else if (k.t === 'dist' || k.t === 'cont' || k.t === 'remark') out.push('        ' + k.s);
+      else if (k.t === 'sec') out.push('        ' + k.label + '  ' + k.s);
+      else if (k.t === 'div') out.push(k.sub ? k.s + '\n' + k.sub : k.s);
+      else if (k.t === 'sign') out.push(k.lines.filter(Boolean).join('\n'));
+    });
+    return out.join('\n') + '\n';
+  }
+
+  /* ---------- Word export: A4, 3/2/2/3 cm margins, Prompt 10.5pt, page number in header ---------- */
+  function buildDocx(b) {
+    var X = window.docx;
+    var FONT = { ascii: 'Prompt', cs: 'Prompt', eastAsia: 'Prompt', hAnsi: 'Prompt' };
+    var base = { font: FONT, size: 21, sizeComplexScript: 21 };
+    var tabs = [{ type: X.TabStopType.LEFT, position: 1418 }];
+    var A = X.AlignmentType;
+    function runs(text, opts, withTab) {
+      var parts = String(text).split('\n'), out = [];
+      parts.forEach(function (line, i) {
+        var o = Object.assign({}, base, opts || {});
+        if (i === 0 && withTab) { o.children = [new X.Tab(), line]; } else { o.text = line; }
+        if (i > 0) o.break = 1;
+        out.push(new X.TextRun(o));
+      });
+      return out;
+    }
+    function P(children, o) { return new X.Paragraph(Object.assign({ children: children, tabStops: tabs }, o || {})); }
+    var kids = [];
+    blocks(b).forEach(function (k) {
+      if (k.t === 'blank') kids.push(P([new X.TextRun(Object.assign({ text: '' }, base))]));
+      else if (k.t === 'center') kids.push(P(runs(k.s), { alignment: A.CENTER }));
+      else if (k.t === 'dist') kids.push(P(runs(k.s, null, true), { alignment: A.THAI_DISTRIBUTE || 'thaiDistribute' }));
+      else if (k.t === 'sec') kids.push(P(runs(k.label + '  ' + k.s, null, true)));
+      else if (k.t === 'cont') kids.push(P(runs(k.s, null, true)));
+      else if (k.t === 'div') {
+        var bold = { bold: true, boldComplexScript: true };
+        kids.push(P(runs(k.s, bold), { alignment: A.CENTER }));
+        if (k.sub) kids.push(P(runs(k.sub, bold), { alignment: A.CENTER }));
+      } else if (k.t === 'sign') {
+        k.lines.filter(Boolean).forEach(function (l) { kids.push(P(runs(l), { alignment: A.CENTER, indent: { left: 5103 } })); });
+      } else if (k.t === 'remark') kids.push(P(runs(k.s, null, true), { alignment: A.THAI_DISTRIBUTE || 'thaiDistribute' }));
+    });
+    var header = new X.Header({
+      children: [new X.Paragraph({ alignment: A.CENTER, children: [new X.TextRun(Object.assign({ children: [X.PageNumber.CURRENT] }, base))] })]
+    });
+    var doc = new X.Document({
+      creator: 'Bill Drafter',
+      title: fullTitle(b),
+      styles: { default: { document: { run: { font: FONT, size: 21, sizeComplexScript: 21 } } } },
+      sections: [{
+        properties: { page: { size: { width: 11907, height: 16834 }, margin: { top: 1701, right: 1134, bottom: 1134, left: 1701, header: 851, footer: 0 } } },
+        headers: { default: header },
+        children: kids
+      }]
+    });
+    return X.Packer.toBlob(doc);
+  }
+
+  /* ---------- state ---------- */
+  var cur = newBill();
+  var freshId = cur.id;                 // open bill that has never been edited, so not stored yet
+  var bills = new Map();
+  var dirty = new Set();
+  var mode = 'pending';                 // pending | remote | local
+  var sb = null, session = null;
+  var tab = 'edit';
+  var saving = false, saveTimer = null, loadedOnce = false;
+  var ui = lsGet('bill-drafter-ui', { sort: 'updated', filter: 'all' });
+  var mem = {};
+  var CFG = window.BILL_CONFIG || {};
+
+  /* ---------- storage: Supabase when signed in, this browser otherwise ---------- */
+  function lsRead() { var v = lsGet('bill-drafter-v1', null); return v && typeof v === 'object' ? v : mem; }
+  function lsWrite(m) { mem = m; return lsSet('bill-drafter-v1', m); }
+  function persist(b) {
+    var data = JSON.parse(JSON.stringify(b));
+    if (mode === 'remote') {
+      return sb.from('bill_drafts').upsert({ id: b.id, user_id: session.user.id, data: data }, { onConflict: 'id' }).then(function (r) { if (r.error) throw r.error; });
+    }
+    var m = lsRead(); m[b.id] = data;
+    return lsWrite(m) ? Promise.resolve() : Promise.reject({ message: 'This browser would not store the bill.' });
+  }
+  function unpersist(id) {
+    if (mode === 'remote') return sb.from('bill_drafts').delete().eq('id', id).then(function (r) { if (r.error) throw r.error; });
+    var m = lsRead(); delete m[id]; lsWrite(m);
+    return Promise.resolve();
+  }
+  function remoteList() {
+    return sb.from('bill_drafts').select('id,data,updated_at').order('updated_at', { ascending: false }).then(function (r) {
+      if (r.error) throw r.error;
+      return r.data.map(function (row) {
+        var d = Object.assign({}, row.data, { id: row.id });
+        var t = Date.parse(row.updated_at); if (t) d.updatedAt = t;
+        return d;
+      });
+    });
+  }
+  function setSave(msg) { $('#save-state').textContent = msg; }
+  function flush() {
+    if (saving || mode === 'pending') return;
+    saving = true;
+    var id = null, failed = false;
+    (function next() {
+      if (!dirty.size) { saving = false; if (!failed) setSave('Saved ' + timeNow()); return; }
+      id = dirty.values().next().value; dirty.delete(id);
+      var b = bills.get(id);
+      if (!b) return next();
+      persist(b).then(next, function (e) {
+        failed = true; dirty.add(id); saving = false;
+        setSave('Not saved: ' + ((e && e.message) || 'try again') + ' (keep editing to retry)');
+      });
+    })();
+  }
+  function touch() {
+    cur.updatedAt = Date.now();
+    bills.set(cur.id, cur);
+    freshId = null;
+    dirty.add(cur.id);
+    setSave('Saving…');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flush, 700);
+    renderList();
+  }
+  function onData(arr) {
+    var next = new Map();
+    arr.forEach(function (raw) {
+      if (!raw || !raw.id) return;
+      var local = bills.get(raw.id);
+      if (dirty.has(raw.id) || (local && local === cur)) next.set(raw.id, local);
+      else next.set(raw.id, normalize(raw));
+    });
+    dirty.forEach(function (id) { if (!next.has(id) && bills.has(id)) next.set(id, bills.get(id)); });
+    bills = next;
+    if (!loadedOnce) {
+      loadedOnce = true;
+      if (freshId === cur.id && next.size) {
+        cur = Array.from(next.values()).sort(function (a, b) { return b.updatedAt - a.updatedAt; })[0];
+        freshId = null;
+        renderEditor();
+      }
+    }
+    renderList();
+  }
+  function setNote(msg) { $('#store-note').textContent = msg; }
+
+  /* ---------- sign in / boot ---------- */
+  function showAuth() { $('#auth').hidden = false; $('#app').hidden = true; $('#a-email').focus(); }
+  function showApp() { $('#auth').hidden = true; $('#app').hidden = false; fitAll(); }
+  function authMsg(text, err) { var m = $('#a-msg'); m.textContent = text || ''; m.classList.toggle('err', !!err); }
+
+  function enterRemote(s) {
+    if (mode === 'remote' && session && session.user.id === s.user.id) { session = s; return; }
+    session = s; mode = 'remote'; loadedOnce = false;
+    $('#btn-out').hidden = false;
+    setNote('Saved to your account (' + (s.user.email || 'signed in') + ').');
+    showApp();
+    // Leave the auth callback before calling Supabase again, otherwise the client can deadlock.
+    setTimeout(function () {
+      remoteList().then(onData).catch(function (e) { setNote('Could not load your bills: ' + (e.message || 'error')); });
+      flush();
+    }, 0);
+  }
+  function boot() {
+    renderEditor(); renderList();
+    var haveSB = CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase && window.supabase.createClient;
+    if (!haveSB) {
+      mode = 'local';
+      setNote(CFG.SUPABASE_URL ? 'Could not reach Supabase, so bills are saved in this browser only.' : 'Saved in this browser only.');
+      showApp();
+      onData(Object.keys(lsRead()).map(function (k) { return lsRead()[k]; }));
+      return;
+    }
+    sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+    sb.auth.onAuthStateChange(function (event, s) {
+      if (s && s.user) enterRemote(s);
+      else if (event === 'SIGNED_OUT') { session = null; mode = 'pending'; bills = new Map(); showAuth(); }
+    });
+    sb.auth.getSession().then(function (r) {
+      if (r.data && r.data.session) enterRemote(r.data.session); else showAuth();
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && mode === 'remote' && !dirty.size && !saving) remoteList().then(onData).catch(function () {});
+    });
+  }
+  $('#auth-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    authMsg('Signing in…');
+    sb.auth.signInWithPassword({ email: $('#a-email').value.trim(), password: $('#a-pass').value }).then(function (r) {
+      if (r.error) authMsg(r.error.message, true); else authMsg('');
+    });
+  });
+  $('#a-up').addEventListener('click', function () {
+    var email = $('#a-email').value.trim(), pass = $('#a-pass').value;
+    if (!email || pass.length < 8) { authMsg('Enter an email and a password of at least 8 characters.', true); return; }
+    authMsg('Creating account…');
+    sb.auth.signUp({ email: email, password: pass, options: { emailRedirectTo: location.href.split('#')[0] } }).then(function (r) {
+      if (r.error) authMsg(r.error.message, true);
+      else if (!r.data.session) authMsg('Account created. Check your email for a confirmation link, then sign in.');
+      else authMsg('');
+    });
+  });
+  $('#btn-out').addEventListener('click', function () { if (sb) sb.auth.signOut(); });
+
+  /* ---------- list ---------- */
+  var byUpd = function (a, b) { return b.updatedAt - a.updatedAt; };
+  var sorters = {
+    updated: byUpd,
+    title: function (a, b) { return (a.name || '￿').localeCompare(b.name || '￿', 'th') || byUpd(a, b); },
+    stage: function (a, b) { return ST[a.status].i - ST[b.status].i || byUpd(a, b); },
+    year: function (a, b) { return (parseInt(arNum(b.year), 10) || 0) - (parseInt(arNum(a.year), 10) || 0) || byUpd(a, b); },
+    sections: function (a, b) { return secCount(b) - secCount(a) || byUpd(a, b); }
+  };
+  function haystack(b) {
+    return [fullTitle(b), b.proposer, b.note, b.reasonTopic].concat(b.items.map(function (i) { return i.text || i.name || ''; })).join(' ').toLowerCase();
+  }
+  function pill(k) { var s = ST[k] || ST.draft; return el('span', { class: 'pill', 'data-tone': s.tone, title: s.en, text: s.th }); }
+  function card(b) {
+    var meta = el('div', { class: 'card-meta' }, pill(b.status));
+    if ((b.proposer || '').trim()) meta.append(el('span', { text: b.proposer.trim() }));
+    meta.append(el('span', { text: thNum(secCount(b)) + ' มาตรา' }), el('span', { text: dateShort(b.updatedAt) }));
+    return el('button', { class: 'card', type: 'button', 'aria-current': b.id === cur.id ? 'true' : 'false', onclick: function () { openBill(b.id); } },
+      el('div', { class: 'card-title', text: fullTitle(b) }), meta);
+  }
+  function renderList() {
+    var q = $('#q').value.trim().toLowerCase();
+    var all = Array.from(bills.values()), arr = all.slice();
+    if (ui.filter !== 'all') arr = arr.filter(function (b) { return b.status === ui.filter; });
+    if (q) arr = arr.filter(function (b) { return haystack(b).indexOf(q) !== -1; });
+    arr.sort(sorters[ui.sort] || byUpd);
+    var host = $('#cards'); host.replaceChildren();
+    if (!arr.length) host.append(el('p', { class: 'empty', text: all.length ? 'No bills match this search.' : 'No saved bills yet. The draft you are editing is saved here as soon as you change something.' }));
+    arr.forEach(function (b) { host.append(card(b)); });
+    $('#count').textContent = all.length ? arr.length + ' of ' + all.length + ' bills' : '';
+  }
+
+  /* ---------- editor ---------- */
+  function fit(t) { t.style.height = 'auto'; t.style.height = t.scrollHeight + 2 + 'px'; }
+  function fitAll() { $$('#editor textarea:not([readonly])').forEach(fit); }
+  function toast(msg) {
+    var t = $('#toast'); t.textContent = msg; t.classList.add('on');
+    clearTimeout(toast.t); toast.t = setTimeout(function () { t.classList.remove('on'); }, 2200);
+  }
+  function updateHeader() { $('#hdr-title').textContent = fullTitle(cur); }
+  function refreshAuto() {
+    syncAuto(cur);
+    cur.items.forEach(function (it) { if (it.auto === 'cite') { var t = $('#t-' + it.id); if (t) { t.value = it.text; fit(t); } } });
+  }
+  function field(id, label, input, hint, extra) {
+    return el('div', { class: 'field' }, el('div', { class: 'lbl-row' }, el('label', { class: 'lbl', for: id, text: label }), extra), input, hint ? el('span', { class: 'hint', text: hint }) : null);
+  }
+  function textInput(id, key, ph, onChange) {
+    var i = el('input', { id: id, class: 'inp', type: 'text', placeholder: ph || '' });
+    i.value = cur[key] || '';
+    i.addEventListener('input', function () { cur[key] = i.value; if (onChange) onChange(); touch(); });
+    return i;
+  }
+  function areaInput(id, key, ph, rows) {
+    var t = el('textarea', { id: id, class: 'inp', rows: rows || 2, placeholder: ph || '' });
+    t.value = cur[key] || '';
+    t.addEventListener('input', function () { cur[key] = t.value; fit(t); touch(); });
+    return t;
+  }
+  function insertCommon(key, text, id) {
+    return el('button', { class: 'btn link', type: 'button', text: 'Insert common wording', onclick: function () {
+      cur[key] = text; var t = $('#' + id); if (t) { t.value = text; fit(t); } touch();
+    } });
+  }
+  function title(th, en) { return el('h3', { class: 'group-title' }, th, ' ', el('span', { class: 'en', text: en })); }
+
+  function buildDetails() {
+    var host = $('#g-details'); host.replaceChildren();
+    host.append(
+      title('รายละเอียดร่าง', 'Bill details'),
+      el('div', { class: 'grid' },
+        field('f-name', 'Name (ชื่อพระราชบัญญัติ)', textInput('f-name', 'name', 'เช่น การคุ้มครองสิ่งแวดล้อม', function () { updateHeader(); refreshAuto(); }), 'Without “พระราชบัญญัติ” or the year.'),
+        field('f-year', 'Year (พ.ศ.)', textInput('f-year', 'year', 'เช่น 2569', function () { updateHeader(); refreshAuto(); })),
+        field('f-proposer', 'Proposer (ผู้เสนอ)', textInput('f-proposer', 'proposer', 'ชื่อผู้เสนอ'))
+      ),
+      field('f-note', 'Note', areaInput('f-note', 'note', 'Private note, not printed in the bill', 2))
+    );
+  }
+  function buildPreamble() {
+    var host = $('#g-preamble'); host.replaceChildren();
+    var mode = el('select', { id: 'f-mode', class: 'inp', 'aria-label': 'Purpose of the law' });
+    MODES.forEach(function (m) { mode.append(el('option', { value: m, text: m })); });
+    mode.value = cur.reasonMode;
+    mode.addEventListener('change', function () { cur.reasonMode = mode.value; touch(); });
+
+    var rightsBox = el('input', { id: 'f-rights', type: 'checkbox', checked: !!cur.rightsOn });
+    var rightsBody = el('div', { class: 'grid', hidden: !cur.rightsOn },
+      field('f-rsec', 'Constitution section (มาตรา …)', textInput('f-rsec', 'rightsSections', 'เช่น ๒๖'), 'Goes after “มาตรา ๓๒ ประกอบกับมาตรา”.'),
+      field('f-rpur', 'Purpose (เพื่อ …)', areaInput('f-rpur', 'rightsPurpose', 'อธิบายเหตุผลและความจำเป็นในการจำกัดสิทธิและเสรีภาพ', 3))
+    );
+    rightsBox.addEventListener('change', function () { cur.rightsOn = rightsBox.checked; rightsBody.hidden = !rightsBox.checked; touch(); fitAll(); });
+
+    host.append(
+      el('summary', {}, title('คำปรารภ', 'Opening, reason and enacting clause')),
+      el('div', { class: 'body' },
+        field('f-open', 'Opening lines (centred)', areaInput('f-open', 'openLines', '', 3), 'One line per row. Leave empty to keep the three dotted lines.'),
+        field('f-proc', 'Proclamation paragraph', areaInput('f-proc', 'proclamation', 'พระบาทสมเด็จพระ…………………… มีพระบรมราชโองการโปรดเกล้าฯ ให้ประกาศว่า', 2), null, insertCommon('proclamation', COMMON_PROCLAIM, 'f-proc')),
+        el('div', { class: 'field' },
+          el('span', { class: 'lbl', text: 'Reason (โดยที่เป็นการสมควร …)' }),
+          el('div', { class: 'reason-row' }, mode, areaInput('f-topic', 'reasonTopic', 'ว่าด้วย …', 2)),
+          el('span', { class: 'hint', text: 'Prints as “โดยที่เป็นการสมควร” + the choice + “กฎหมายว่าด้วย” + your text.' })),
+        el('div', { class: 'field' },
+          el('label', { class: 'check' }, rightsBox, el('span', { text: 'Include the rights-limitation paragraphs (มาตรา ๓๒). Untick when the bill does not limit anyone’s rights or liberties.' })),
+          rightsBody),
+        field('f-enact', 'Enacting clause (just before มาตรา ๑)', areaInput('f-enact', 'enact', 'จึงทรงพระกรุณาโปรดเกล้าฯ ให้ตราพระราชบัญญัติขึ้นไว้โดยคำแนะนำและยินยอมของรัฐสภา ดังต่อไปนี้', 2), null, insertCommon('enact', COMMON_ENACT, 'f-enact'))
+      )
+    );
+  }
+  function buildClosing() {
+    var host = $('#g-closing'); host.replaceChildren();
+    var box = el('input', { id: 'f-closing', type: 'checkbox', checked: !!cur.closingOn });
+    var body = el('div', { class: 'field', hidden: !cur.closingOn },
+      el('div', { class: 'grid' },
+        field('f-csname', 'Countersigned by (ผู้รับสนอง)', textInput('f-csname', 'csName', 'ชื่อ-สกุล')),
+        field('f-csrole', 'Position (ตำแหน่ง)', textInput('f-csrole', 'csRole', 'นายกรัฐมนตรี'))),
+      field('f-remark', 'Reason for enactment (หมายเหตุ)', areaInput('f-remark', 'remark', 'ข้อความต่อจาก “…ฉบับนี้ คือ”', 3)));
+    box.addEventListener('change', function () { cur.closingOn = box.checked; body.hidden = !box.checked; touch(); fitAll(); });
+    host.append(title('ท้ายร่าง', 'Optional closing'),
+      el('label', { class: 'check' }, box, el('span', { text: 'Add the countersign block and หมายเหตุ at the end. Your template stops after the last section, so this is off by default.' })),
+      body);
+  }
+
+  function ctlButtons(it, i) {
+    var up = el('button', { class: 'btn ico', type: 'button', title: 'Move up', 'aria-label': 'Move up', text: '↑', disabled: i === 0, onclick: function () { move(i, -1); } });
+    var dn = el('button', { class: 'btn ico', type: 'button', title: 'Move down', 'aria-label': 'Move down', text: '↓', disabled: i === cur.items.length - 1, onclick: function () { move(i, 1); } });
+    var add = el('button', { class: 'btn ico', type: 'button', title: 'Add a section below', 'aria-label': 'Add a section below', text: '+', onclick: function () { insertAfter(i, newSec('')); } });
+    var del = el('button', { class: 'btn ico', type: 'button', title: 'Delete', 'aria-label': 'Delete', text: '×' });
+    var timer = null;
+    del.addEventListener('click', function () {
+      var has = (it.text || it.name || '').trim() !== '';
+      if (!has || del.dataset.armed) { clearTimeout(timer); removeAt(i); return; }
+      del.dataset.armed = '1'; del.textContent = 'Sure?'; del.classList.add('armed');
+      timer = setTimeout(function () { delete del.dataset.armed; del.textContent = '×'; del.classList.remove('armed'); }, 3000);
+    });
+    return el('div', { class: 'ctl' }, up, dn, add, del);
+  }
+  function secRow(it, i, label) {
+    var t = el('textarea', { id: 't-' + it.id, class: 'inp', rows: 1, placeholder: 'ข้อความในมาตรา' });
+    t.value = it.text || '';
+    var autoNote = it.auto ? el('span', { class: 'auto', text: 'Filled in from the name and year until you edit it.' }) : null;
+    t.addEventListener('input', function () {
+      it.text = t.value;
+      if (it.auto) { delete it.auto; if (autoNote) autoNote.remove(); }
+      fit(t); touch();
+    });
+    return el('div', { class: 'row sec', 'data-id': it.id }, el('span', { class: 'sec-no', text: label }), el('div', { class: 'sec-text' }, t, autoNote), ctlButtons(it, i));
+  }
+  function divRow(it, i, label) {
+    var lvl = el('select', { class: 'inp div-level', 'aria-label': 'Division level' });
+    LEVELS.forEach(function (l) { lvl.append(el('option', { value: l, text: l })); });
+    lvl.value = it.level;
+    lvl.addEventListener('change', function () { it.level = lvl.value; touch(); renderItems(it.id); });
+    var name = el('input', { class: 'inp div-name', type: 'text', placeholder: 'ชื่อ' + it.level, 'aria-label': 'Division name', hidden: it.level === 'บทเฉพาะกาล' });
+    name.value = it.name || '';
+    name.addEventListener('input', function () { it.name = name.value; touch(); });
+    return el('div', { class: 'row div', 'data-id': it.id }, el('span', { class: 'div-no', text: label }), lvl, name, ctlButtons(it, i));
+  }
+  function renderItems(focusId) {
+    var host = $('#items'); host.replaceChildren();
+    var L = labelsOf(cur);
+    cur.items.forEach(function (it, i) { host.append(it.kind === 'sec' ? secRow(it, i, L[i]) : divRow(it, i, L[i])); });
+    if (!cur.items.length) host.append(el('p', { class: 'empty', text: 'Nothing here yet. Add a section or a division below.' }));
+    fitAll();
+    if (focusId) {
+      var f = host.querySelector('[data-id="' + focusId + '"] textarea, [data-id="' + focusId + '"] .div-name:not([hidden])');
+      if (f) f.focus();
+    }
+  }
+  function move(i, d) { var a = cur.items, j = i + d; if (j < 0 || j >= a.length) return; var t = a[i]; a[i] = a[j]; a[j] = t; touch(); renderItems(a[j].id); }
+  function insertAfter(i, item) { cur.items.splice(i + 1, 0, item); touch(); renderItems(item.id); }
+  function appendItem(item) { insertAfter(cur.items.length - 1, item); }
+  function removeAt(i) { cur.items.splice(i, 1); touch(); renderItems(); }
+
+  function renderPreview() {
+    var host = $('#paper'); host.replaceChildren();
+    blocks(cur).forEach(function (k) {
+      if (k.t === 'blank') host.append(el('div', { class: 'p-blank' }));
+      else if (k.t === 'center') host.append(el('div', { class: 'p-center', text: k.s }));
+      else if (k.t === 'dist') host.append(el('p', { class: 'p-dist', text: k.s }));
+      else if (k.t === 'sec') host.append(el('p', { class: 'p-sec', text: k.label + '  ' + k.s }));
+      else if (k.t === 'cont') host.append(el('p', { class: 'p-sec', text: k.s }));
+      else if (k.t === 'div') host.append(el('div', { class: 'p-div' }, k.s, k.sub ? el('div', { text: k.sub }) : null));
+      else if (k.t === 'sign') host.append(el('div', { class: 'p-sign' }, k.lines.filter(Boolean).map(function (l) { return el('div', { text: l }); })));
+      else if (k.t === 'remark') host.append(el('p', { class: 'p-remark', text: k.s }));
+    });
+  }
+  function showTab(t) {
+    tab = t;
+    $('#tab-edit').setAttribute('aria-selected', String(t === 'edit'));
+    $('#tab-preview').setAttribute('aria-selected', String(t === 'preview'));
+    $('#edit-body').hidden = t !== 'edit';
+    $('#preview-body').hidden = t !== 'preview';
+    if (t === 'preview') renderPreview(); else fitAll();
+    $('#editor').scrollTop = 0;
+  }
+  function renderEditor() {
+    syncAuto(cur);
+    updateHeader();
+    $('#status').value = cur.status;
+    buildDetails(); buildPreamble(); renderItems(); buildClosing();
+    $('#copy-fb').hidden = true;
+    showTab(tab);
+  }
+
+  /* ---------- actions ---------- */
+  function openBill(id) {
+    var b = bills.get(id); if (!b) return;
+    cur = b; renderEditor(); renderList();
+    $('#app').dataset.view = 'edit';
+    $('#editor').scrollTop = 0;
+  }
+  function newDraft() {
+    cur = newBill(); freshId = cur.id; tab = 'edit';
+    renderEditor(); renderList();
+    $('#app').dataset.view = 'edit';
+    var n = $('#f-name'); if (n) n.focus();
+  }
+  function dupBill() {
+    var c = JSON.parse(JSON.stringify(cur));
+    c.id = uuid(); c.status = 'draft';
+    c.name = (c.name || '').trim() ? c.name.trim() + ' (สำเนา)' : '';
+    c.items.forEach(function (i) { i.id = rid(); });
+    c.createdAt = c.updatedAt = Date.now();
+    cur = c; touch(); renderEditor(); toast('Duplicated. You are now editing the copy.');
+  }
+  function delBill() {
+    var id = cur.id, wasFresh = freshId === id;
+    bills.delete(id); dirty.delete(id); freshId = null;
+    if (!wasFresh) unpersist(id).catch(function () { toast('Could not delete the saved copy.'); });
+    var next = Array.from(bills.values()).sort(byUpd)[0];
+    if (next) cur = next; else { cur = newBill(); freshId = cur.id; }
+    renderEditor(); renderList();
+    $('#app').dataset.view = 'list';
+    toast('Bill deleted');
+  }
+  function copyText() {
+    var text = toText(cur);
+    var fallback = function () { var ta = $('#copy-ta'); ta.value = text; $('#copy-fb').hidden = false; ta.focus(); ta.select(); };
+    try { navigator.clipboard.writeText(text).then(function () { toast('Copied'); }, fallback); } catch (e) { fallback(); }
+  }
+  function downloadDocx() {
+    if (!window.docx) { toast('The Word export library did not load. Check your connection and reload.'); return; }
+    buildDocx(cur).then(function (blob) {
+      var name = fullTitle(cur).replace(/[\\/:*?"<>|]/g, '').trim() || 'bill';
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = name + '.docx';
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      toast('Word file downloaded');
+    }).catch(function () { toast('Could not build the Word file.'); });
+  }
+
+  /* ---------- wiring ---------- */
+  var statusSel = $('#status');
+  STATUSES.forEach(function (s) { statusSel.append(el('option', { value: s.k, text: s.th + ' · ' + s.en })); });
+  var filterSel = $('#filter');
+  filterSel.append(el('option', { value: 'all', text: 'All stages' }));
+  STATUSES.forEach(function (s) { filterSel.append(el('option', { value: s.k, text: s.th + ' · ' + s.en })); });
+  $('#sort').value = ui.sort; filterSel.value = ui.filter;
+  statusSel.addEventListener('change', function () { cur.status = statusSel.value; touch(); });
+  $('#sort').addEventListener('change', function (e) { ui.sort = e.target.value; lsSet('bill-drafter-ui', ui); renderList(); });
+  filterSel.addEventListener('change', function (e) { ui.filter = e.target.value; lsSet('bill-drafter-ui', ui); renderList(); });
+  $('#q').addEventListener('input', renderList);
+  $('#btn-new').addEventListener('click', newDraft);
+  $('#btn-back').addEventListener('click', function () { $('#app').dataset.view = 'list'; });
+  $('#tab-edit').addEventListener('click', function () { showTab('edit'); });
+  $('#tab-preview').addEventListener('click', function () { showTab('preview'); });
+  $('#btn-copy').addEventListener('click', copyText);
+  $('#btn-docx').addEventListener('click', downloadDocx);
+  $('#btn-dup').addEventListener('click', dupBill);
+  $('#copy-close').addEventListener('click', function () { $('#copy-fb').hidden = true; });
+  var delBtn = $('#btn-del'), delTimer = null;
+  delBtn.addEventListener('click', function () {
+    if (delBtn.dataset.armed) { clearTimeout(delTimer); delete delBtn.dataset.armed; delBtn.textContent = 'Delete'; delBtn.classList.remove('armed'); delBill(); return; }
+    delBtn.dataset.armed = '1'; delBtn.textContent = 'Delete this bill?'; delBtn.classList.add('armed');
+    delTimer = setTimeout(function () { delete delBtn.dataset.armed; delBtn.textContent = 'Delete'; delBtn.classList.remove('armed'); }, 3000);
+  });
+  $('#add-sec').addEventListener('click', function () { appendItem(newSec('')); });
+  $('#add-div').addEventListener('click', function () { appendItem(newDiv('หมวด', '')); });
+  $('#add-sub').addEventListener('click', function () { appendItem(newDiv('ส่วน', '')); });
+  $('#add-trans').addEventListener('click', function () { appendItem(newDiv('บทเฉพาะกาล', '')); });
+  window.addEventListener('resize', function () { if (tab === 'edit') fitAll(); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (tab === 'edit') fitAll(); });
+
+  boot();
+})();
+</script>
+</body>
+</html>
