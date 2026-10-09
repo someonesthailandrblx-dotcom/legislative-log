@@ -265,7 +265,7 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
           <h3 class="group-title">Body <span class="en">เนื้อหา</span></h3>
           <p class="hint">Each line becomes its own indented paragraph. Use new lines for วรรค and (๑) (๒) items.</p>
         </div>
-        <label class="check small" style="margin-bottom:6px"><input id="f-space" type="checkbox"><span>Leave a blank line between sections</span></label>
+        <label class="check small" style="margin-bottom:6px"><input id="f-space" type="checkbox"><span>Leave a blank line after every section (มาตรา ๑ and ๒ always have one)</span></label>
         <div id="items" class="items"></div>
         <div class="addbar">
           <button id="add-sec" class="btn" type="button">+ Section (มาตรา)</button>
@@ -310,6 +310,9 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
   var D50 = '..............................................................';
   var D44 = '............................................';
   var D27 = '...........................';
+  var RULE = '___________________';
+  var DLONG = new Array(431).join('.');
+  var D65 = new Array(66).join('.');
   var DL = '..............................................................................................................................................';
   var COMMON_PROCLAIM = 'พระบาทสมเด็จพระ…………………… มีพระบรมราชโองการโปรดเกล้าฯ ให้ประกาศว่า';
   var COMMON_ENACT = 'จึงทรงพระกรุณาโปรดเกล้าฯ ให้ตราพระราชบัญญัติขึ้นไว้โดยคำแนะนำและยินยอมของรัฐสภา ดังต่อไปนี้';
@@ -390,6 +393,13 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
       return 'บทเฉพาะกาล';
     });
   }
+  function labGap(l) { return /^มาตรา [๑๒๓]$/.test(l) ? '  ' : ' '; }
+  function cleanPurpose(t) {
+    t = String(t || '').trim();
+    if (/^เหตุผลและความจำเป็น/.test(t)) { var k = t.indexOf('เพื่อ'); if (k >= 0) t = t.slice(k + 5); }
+    var z = t.indexOf(' ซึ่งการตรา'); if (z >= 0) t = t.slice(0, z);
+    return t.trim();
+  }
   function textLines(text) {
     var p = String(text || '').split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
     return p.length ? p : [DL];
@@ -402,43 +412,44 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
     var blank = function () { o.push({ t: 'blank' }); };
     var gap = function () { if (o.length && o[o.length - 1].t !== 'blank') blank(); };
     var dist = function (s) { o.push({ t: 'dist', s: s }); };
+    var rule = function () { o.push({ t: 'rule', s: RULE }); };
     var rs = thNum((b.rightsSection || '').trim() || '............');
     var pair = thNum((b.rightsPair || '').trim() || '............');
     if (b.status !== 'enacted') ctr('ร่าง');
     ctr('พระราชบัญญัติ');
     ctr((b.name || '').trim() || D50);
     ctr('พ.ศ. ' + yearTh(b));
-    blank(); blank();
+    rule(); blank();
     var lines = (b.openLines || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
     (lines.length ? lines : [D44, D44, D44]).forEach(ctr);
-    dist((b.proclamation || '').trim() || DL);
+    dist((b.proclamation || '').trim() || DLONG);
     dist('โดยที่เป็นการสมควร' + b.reasonMode + 'กฎหมายว่าด้วย' + ((b.reasonTopic || '').trim() || DL));
     if (b.rightsOn) {
       dist('พระราชบัญญัตินี้มีบทบัญญัติบางประการเกี่ยวกับการจำกัดสิทธิและเสรีภาพของบุคคล ซึ่งมาตรา ' + rs + ' ประกอบกับมาตรา ' + pair +
         ' ของรัฐธรรมนูญแห่งราชอาณาจักรไทย บัญญัติให้กระทำได้โดยอาศัยอำนาจตามบทบัญญัติแห่งกฎหมาย');
-      dist('เหตุผลและความจำเป็นในการจำกัดสิทธิและเสรีภาพของบุคคลตามพระราชบัญญัตินี้ เพื่อ' + ((b.rightsPurpose || '').trim() || '.............................') +
+      dist('เหตุผลและความจำเป็นในการจำกัดสิทธิและเสรีภาพของบุคคลตามพระราชบัญญัตินี้ เพื่อ' + (cleanPurpose(b.rightsPurpose) || '.............................') +
         ' ซึ่งการตราพระราชบัญญัตินี้สอดคล้องกับเงื่อนไขที่บัญญัติไว้ในมาตรา ' + rs + ' ของรัฐธรรมนูญแห่งราชอาณาจักรไทยแล้ว');
     }
-    dist((b.enact || '').trim() || DL);
+    dist((b.enact || '').trim() || DLONG);
     blank();
     b.items.forEach(function (it, i) {
       if (it.kind === 'sec') {
         textLines(it.text).forEach(function (p, j) {
           if (j === 0 && /ให้ใช้บังคับ$/.test(p)) p = p + ' ' + D50;
-          o.push(j === 0 ? { t: 'sec', label: L[i], s: p } : { t: 'cont', s: p });
+          o.push(j === 0 ? { t: 'sec', label: L[i] + labGap(L[i]), s: p } : { t: 'cont', s: p });
         });
-        if (b.spaceSections) blank();
+        if (b.spaceSections || /^มาตรา [๑๒]$/.test(L[i])) blank();
       } else {
         gap(); ctr(L[i]);
         if (it.level !== 'บทเฉพาะกาล') ctr((it.name || '').trim() || '………………');
-        blank(); blank();
+        rule(); blank();
       }
     });
     while (o.length && o[o.length - 1].t === 'blank') o.pop();
     if (b.signOn) {
       blank();
       o.push({ t: 'cont', s: 'ผู้รับสนองพระบรมราชโองการ' });
-      o.push({ t: 'cont', s: (b.csName || '').trim() || D50 });
+      o.push({ t: 'cont', s: (b.csName || '').trim() || D65 });
       if ((b.csRole || '').trim()) o.push({ t: 'cont', s: b.csRole.trim() });
     }
     if (b.remarkOn) {
@@ -451,9 +462,9 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
     var out = [];
     blocks(b).forEach(function (k) {
       if (k.t === 'blank') out.push('');
-      else if (k.t === 'center') out.push(k.s);
+      else if (k.t === 'center' || k.t === 'rule') out.push(k.s);
       else if (k.t === 'dist' || k.t === 'cont') out.push('        ' + k.s);
-      else if (k.t === 'sec') out.push('        ' + k.label + '  ' + k.s);
+      else if (k.t === 'sec') out.push('        ' + k.label + k.s);
     });
     return out.join('\n') + '\n';
   }
@@ -479,9 +490,9 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
     var kids = [];
     blocks(b).forEach(function (k) {
       if (k.t === 'blank') kids.push(P([new X.TextRun(Object.assign({ text: '' }, base))]));
-      else if (k.t === 'center') kids.push(P(runs(k.s), { alignment: A.CENTER }));
+      else if (k.t === 'center' || k.t === 'rule') kids.push(P(runs(k.s), { alignment: A.CENTER }));
       else if (k.t === 'dist') kids.push(P(runs(k.s, null, true), { alignment: A.THAI_DISTRIBUTE || 'thaiDistribute' }));
-      else if (k.t === 'sec') kids.push(P(runs(k.label + '  ' + k.s, null, true)));
+      else if (k.t === 'sec') kids.push(P(runs(k.label + k.s, null, true)));
       else if (k.t === 'cont') kids.push(P(runs(k.s, null, true)));
     });
     var header = new X.Header({
@@ -490,10 +501,10 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
     var doc = new X.Document({
       creator: 'Bill Drafter',
       title: fullTitle(b),
-      styles: { default: { document: { run: { font: FONT, size: 21, sizeComplexScript: 21 } } } },
+      styles: { default: { document: { run: { font: FONT, size: 21, sizeComplexScript: 21, language: { value: 'en-US', eastAsia: 'en-US', bidirectional: 'th-TH' } } } } },
       sections: [{
-        properties: { page: { size: { width: 11907, height: 16834 }, margin: { top: 1701, right: 1134, bottom: 1134, left: 1701, header: 851, footer: 0 } } },
-        headers: { default: header },
+        properties: { titlePage: true, page: { size: { width: 11907, height: 16834 }, margin: { top: 1701, right: 1134, bottom: 1134, left: 1701, header: 851, footer: 0 }, pageNumbers: { start: 1, formatType: X.NumberFormat.THAI_NUMBERS } } },
+        headers: { default: header, first: new X.Header({ children: [new X.Paragraph({ children: [] })] }) },
         children: kids
       }]
     });
@@ -828,9 +839,9 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
     var host = $('#paper'); host.replaceChildren();
     blocks(cur).forEach(function (k) {
       if (k.t === 'blank') host.append(el('div', { class: 'p-blank' }));
-      else if (k.t === 'center') host.append(el('div', { class: 'p-center', text: k.s }));
+      else if (k.t === 'center' || k.t === 'rule') host.append(el('div', { class: 'p-center', text: k.s }));
       else if (k.t === 'dist') host.append(el('p', { class: 'p-dist', text: k.s }));
-      else if (k.t === 'sec') host.append(el('p', { class: 'p-sec', text: k.label + '  ' + k.s }));
+      else if (k.t === 'sec') host.append(el('p', { class: 'p-sec', text: k.label + k.s }));
       else if (k.t === 'cont') host.append(el('p', { class: 'p-sec', text: k.s }));
     });
   }
