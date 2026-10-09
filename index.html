@@ -263,8 +263,9 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
       <section id="g-body">
         <div class="body-head">
           <h3 class="group-title">Body <span class="en">เนื้อหา</span></h3>
-          <p class="hint">Sections run in order to the end of the bill. A blank line inside a section starts a new paragraph.</p>
+          <p class="hint">Each line becomes its own indented paragraph. Use new lines for วรรค and (๑) (๒) items.</p>
         </div>
+        <label class="check small" style="margin-bottom:6px"><input id="f-space" type="checkbox"><span>Leave a blank line between sections</span></label>
         <div id="items" class="items"></div>
         <div class="addbar">
           <button id="add-sec" class="btn" type="button">+ Section (มาตรา)</button>
@@ -312,7 +313,7 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
   var DL = '..............................................................................................................................................';
   var COMMON_PROCLAIM = 'พระบาทสมเด็จพระ…………………… มีพระบรมราชโองการโปรดเกล้าฯ ให้ประกาศว่า';
   var COMMON_ENACT = 'จึงทรงพระกรุณาโปรดเกล้าฯ ให้ตราพระราชบัญญัติขึ้นไว้โดยคำแนะนำและยินยอมของรัฐสภา ดังต่อไปนี้';
-  var EFFECT = 'พระราชบัญญัตินี้ให้ใช้บังคับ';
+  var EFFECT_FULL = 'พระราชบัญญัตินี้ให้ใช้บังคับตั้งแต่วันถัดจากวันประกาศในราชกิจจานุเบกษาเป็นต้นไป';
 
   /* ---------- helpers ---------- */
   function $(s, r) { return (r || document).querySelector(s); }
@@ -354,11 +355,11 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
   function newBill() {
     var now = Date.now();
     return {
-      id: uuid(), name: '', year: String(new Date().getFullYear() + 543), proposer: '', status: 'draft', note: '',
-      openLines: '', proclamation: '', reasonMode: MODES[0], reasonTopic: '',
-      rightsOn: true, rightsSections: '', rightsPurpose: '', enact: '',
-      items: [newSec('', 'cite'), newSec(EFFECT + ' '), newSec('')],
-      closingOn: false, csName: '', csRole: 'นายกรัฐมนตรี', remark: '',
+      id: uuid(), name: '', year: '', proposer: '', status: 'draft', note: '',
+      openLines: '', proclamation: '', reasonMode: MODES[0], reasonTopic: '', reasonAuto: true,
+      rightsOn: true, rightsSection: '', rightsPair: '๓๒', rightsPurpose: '', enact: '',
+      items: [newSec('', 'cite'), newSec(EFFECT_FULL), newSec('')],
+      spaceSections: false, signOn: true, csName: '', csRole: 'นายกรัฐมนตรี', remarkOn: false, remark: '',
       createdAt: now, updatedAt: now
     };
   }
@@ -373,6 +374,7 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
   function yearTh(b) { var y = arNum((b.year || '').trim()); return y ? thNum(y) : '....'; }
   function fullTitle(b) { return 'พระราชบัญญัติ' + ((b.name || '').trim() || '……………') + ' พ.ศ. ' + yearTh(b); }
   function syncAuto(b) {
+    if (b.reasonAuto !== false) b.reasonTopic = (b.name || '').trim();
     b.items.forEach(function (it) {
       if (it.auto === 'cite') it.text = 'พระราชบัญญัตินี้เรียกว่า “พระราชบัญญัติ' + ((b.name || '').trim() || D27) + ' พ.ศ. ' + yearTh(b) + '”';
     });
@@ -384,12 +386,12 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
       if (it.kind === 'sec') { sec++; return 'มาตรา ' + thNum(sec); }
       if (it.level === 'ภาค') { part++; div = 0; sub = 0; return 'ภาค ' + thNum(part); }
       if (it.level === 'หมวด') { div++; sub = 0; return 'หมวด ' + thNum(div); }
-      if (it.level === 'ส่วน') { sub++; return 'ส่วน ' + thNum(sub); }
+      if (it.level === 'ส่วน') { sub++; return 'ส่วนที่ ' + thNum(sub); }
       return 'บทเฉพาะกาล';
     });
   }
-  function paras(text) {
-    var p = String(text || '').split(/\n\s*\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+  function textLines(text) {
+    var p = String(text || '').split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
     return p.length ? p : [DL];
   }
 
@@ -398,7 +400,10 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
     var L = labelsOf(b), o = [];
     var ctr = function (s) { o.push({ t: 'center', s: s }); };
     var blank = function () { o.push({ t: 'blank' }); };
+    var gap = function () { if (o.length && o[o.length - 1].t !== 'blank') blank(); };
     var dist = function (s) { o.push({ t: 'dist', s: s }); };
+    var rs = thNum((b.rightsSection || '').trim() || '............');
+    var pair = thNum((b.rightsPair || '').trim() || '............');
     if (b.status !== 'enacted') ctr('ร่าง');
     ctr('พระราชบัญญัติ');
     ctr((b.name || '').trim() || D50);
@@ -407,35 +412,38 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
     var lines = (b.openLines || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
     (lines.length ? lines : [D44, D44, D44]).forEach(ctr);
     dist((b.proclamation || '').trim() || DL);
-    blank();
-    dist('โดยที่เป็นการสมควร' + b.reasonMode + 'กฎหมายว่าด้วย ' + ((b.reasonTopic || '').trim() || DL));
+    dist('โดยที่เป็นการสมควร' + b.reasonMode + 'กฎหมายว่าด้วย' + ((b.reasonTopic || '').trim() || DL));
     if (b.rightsOn) {
-      dist('พระราชบัญญัตินี้มีบทบัญญัติบางประการเกี่ยวกับการจำกัดสิทธิและเสรีภาพของบุคคล ซึ่งมาตรา ๓๒ ประกอบกับมาตรา ' +
-        ((b.rightsSections || '').trim() || '............') + ' ของรัฐธรรมนูญแห่งราชอาณาจักรไทย บัญญัติให้กระทำได้โดยอาศัยอำนาจตามบทบัญญัติแห่งกฎหมาย');
-      dist('เหตุผลและความจำเป็นในการจำกัดสิทธิและเสรีภาพของบุคคลตามพระราชบัญญัตินี้ เพื่อ' +
-        ((b.rightsPurpose || '').trim() || '.............................') +
-        ' ซึ่งการตราพระราชบัญญัตินี้สอดคล้องกับเงื่อนไขที่บัญญัติไว้ในมาตรา ๓๒ ของรัฐธรรมนูญแห่งราชอาณาจักรไทยแล้ว');
+      dist('พระราชบัญญัตินี้มีบทบัญญัติบางประการเกี่ยวกับการจำกัดสิทธิและเสรีภาพของบุคคล ซึ่งมาตรา ' + rs + ' ประกอบกับมาตรา ' + pair +
+        ' ของรัฐธรรมนูญแห่งราชอาณาจักรไทย บัญญัติให้กระทำได้โดยอาศัยอำนาจตามบทบัญญัติแห่งกฎหมาย');
+      dist('เหตุผลและความจำเป็นในการจำกัดสิทธิและเสรีภาพของบุคคลตามพระราชบัญญัตินี้ เพื่อ' + ((b.rightsPurpose || '').trim() || '.............................') +
+        ' ซึ่งการตราพระราชบัญญัตินี้สอดคล้องกับเงื่อนไขที่บัญญัติไว้ในมาตรา ' + rs + ' ของรัฐธรรมนูญแห่งราชอาณาจักรไทยแล้ว');
     }
-    blank();
     dist((b.enact || '').trim() || DL);
     blank();
     b.items.forEach(function (it, i) {
       if (it.kind === 'sec') {
-        paras(it.text).forEach(function (p, j) {
+        textLines(it.text).forEach(function (p, j) {
           if (j === 0 && /ให้ใช้บังคับ$/.test(p)) p = p + ' ' + D50;
           o.push(j === 0 ? { t: 'sec', label: L[i], s: p } : { t: 'cont', s: p });
         });
+        if (b.spaceSections) blank();
       } else {
-        o.push({ t: 'div', s: L[i], sub: it.level === 'บทเฉพาะกาล' ? '' : ((it.name || '').trim() || '………………') });
+        gap(); ctr(L[i]);
+        if (it.level !== 'บทเฉพาะกาล') ctr((it.name || '').trim() || '………………');
+        blank(); blank();
       }
-      blank();
     });
-    if (b.closingOn) {
-      o.push({ t: 'sign', lines: ['ผู้รับสนองพระบรมราชโองการ', (b.csName || '').trim() || '………………………………', (b.csRole || '').trim()] });
+    while (o.length && o[o.length - 1].t === 'blank') o.pop();
+    if (b.signOn) {
       blank();
-      o.push({ t: 'remark', s: 'หมายเหตุ :- เหตุผลในการประกาศใช้พระราชบัญญัติฉบับนี้ คือ ' + ((b.remark || '').trim() || DL) });
-    } else {
-      while (o.length && o[o.length - 1].t === 'blank') o.pop();
+      o.push({ t: 'cont', s: 'ผู้รับสนองพระบรมราชโองการ' });
+      o.push({ t: 'cont', s: (b.csName || '').trim() || D50 });
+      if ((b.csRole || '').trim()) o.push({ t: 'cont', s: b.csRole.trim() });
+    }
+    if (b.remarkOn) {
+      blank();
+      dist('หมายเหตุ :- เหตุผลในการประกาศใช้พระราชบัญญัติฉบับนี้ คือ ' + ((b.remark || '').trim() || DL));
     }
     return o;
   }
@@ -444,10 +452,8 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
     blocks(b).forEach(function (k) {
       if (k.t === 'blank') out.push('');
       else if (k.t === 'center') out.push(k.s);
-      else if (k.t === 'dist' || k.t === 'cont' || k.t === 'remark') out.push('        ' + k.s);
+      else if (k.t === 'dist' || k.t === 'cont') out.push('        ' + k.s);
       else if (k.t === 'sec') out.push('        ' + k.label + '  ' + k.s);
-      else if (k.t === 'div') out.push(k.sub ? k.s + '\n' + k.sub : k.s);
-      else if (k.t === 'sign') out.push(k.lines.filter(Boolean).join('\n'));
     });
     return out.join('\n') + '\n';
   }
@@ -477,13 +483,6 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
       else if (k.t === 'dist') kids.push(P(runs(k.s, null, true), { alignment: A.THAI_DISTRIBUTE || 'thaiDistribute' }));
       else if (k.t === 'sec') kids.push(P(runs(k.label + '  ' + k.s, null, true)));
       else if (k.t === 'cont') kids.push(P(runs(k.s, null, true)));
-      else if (k.t === 'div') {
-        var bold = { bold: true, boldComplexScript: true };
-        kids.push(P(runs(k.s, bold), { alignment: A.CENTER }));
-        if (k.sub) kids.push(P(runs(k.sub, bold), { alignment: A.CENTER }));
-      } else if (k.t === 'sign') {
-        k.lines.filter(Boolean).forEach(function (l) { kids.push(P(runs(l), { alignment: A.CENTER, indent: { left: 5103 } })); });
-      } else if (k.t === 'remark') kids.push(P(runs(k.s, null, true), { alignment: A.THAI_DISTRIBUTE || 'thaiDistribute' }));
     });
     var header = new X.Header({
       children: [new X.Paragraph({ alignment: A.CENTER, children: [new X.TextRun(Object.assign({ children: [X.PageNumber.CURRENT] }, base))] })]
@@ -688,6 +687,7 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
   function updateHeader() { $('#hdr-title').textContent = fullTitle(cur); }
   function refreshAuto() {
     syncAuto(cur);
+    var tp = $('#f-topic'); if (tp && cur.reasonAuto !== false) { tp.value = cur.reasonTopic; fit(tp); }
     cur.items.forEach(function (it) { if (it.auto === 'cite') { var t = $('#t-' + it.id); if (t) { t.value = it.text; fit(t); } } });
   }
   function field(id, label, input, hint, extra) {
@@ -718,7 +718,7 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
       title('รายละเอียดร่าง', 'Bill details'),
       el('div', { class: 'grid' },
         field('f-name', 'Name (ชื่อพระราชบัญญัติ)', textInput('f-name', 'name', 'เช่น การคุ้มครองสิ่งแวดล้อม', function () { updateHeader(); refreshAuto(); }), 'Without “พระราชบัญญัติ” or the year.'),
-        field('f-year', 'Year (พ.ศ.)', textInput('f-year', 'year', 'เช่น 2569', function () { updateHeader(); refreshAuto(); })),
+        field('f-year', 'Year (พ.ศ.)', textInput('f-year', 'year', 'ปล่อยว่างไว้', function () { updateHeader(); refreshAuto(); }), 'Leave empty to print “พ.ศ. ....”.'),
         field('f-proposer', 'Proposer (ผู้เสนอ)', textInput('f-proposer', 'proposer', 'ชื่อผู้เสนอ'))
       ),
       field('f-note', 'Note', areaInput('f-note', 'note', 'Private note, not printed in the bill', 2))
@@ -730,12 +730,15 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
     MODES.forEach(function (m) { mode.append(el('option', { value: m, text: m })); });
     mode.value = cur.reasonMode;
     mode.addEventListener('change', function () { cur.reasonMode = mode.value; touch(); });
+    var topic = areaInput('f-topic', 'reasonTopic', 'ชื่อกฎหมาย หรือเรื่องที่กฎหมายว่าด้วย', 2);
+    topic.addEventListener('input', function () { cur.reasonAuto = false; });
 
     var rightsBox = el('input', { id: 'f-rights', type: 'checkbox', checked: !!cur.rightsOn });
-    var rightsBody = el('div', { class: 'grid', hidden: !cur.rightsOn },
-      field('f-rsec', 'Constitution section (มาตรา …)', textInput('f-rsec', 'rightsSections', 'เช่น ๒๖'), 'Goes after “มาตรา ๓๒ ประกอบกับมาตรา”.'),
-      field('f-rpur', 'Purpose (เพื่อ …)', areaInput('f-rpur', 'rightsPurpose', 'อธิบายเหตุผลและความจำเป็นในการจำกัดสิทธิและเสรีภาพ', 3))
-    );
+    var rightsBody = el('div', { class: 'field', hidden: !cur.rightsOn },
+      el('div', { class: 'grid' },
+        field('f-rsec', 'Section relied on (มาตรา …)', textInput('f-rsec', 'rightsSection', 'เช่น ๒๔'), 'Printed first, and again in the last sentence.'),
+        field('f-rpair', 'Paired with (ประกอบกับมาตรา …)', textInput('f-rpair', 'rightsPair', '๓๒'))),
+      field('f-rpur', 'Purpose (เพื่อ …)', areaInput('f-rpur', 'rightsPurpose', 'อธิบายเหตุผลและความจำเป็นในการจำกัดสิทธิและเสรีภาพ', 3)));
     rightsBox.addEventListener('change', function () { cur.rightsOn = rightsBox.checked; rightsBody.hidden = !rightsBox.checked; touch(); fitAll(); });
 
     host.append(
@@ -745,10 +748,10 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
         field('f-proc', 'Proclamation paragraph', areaInput('f-proc', 'proclamation', 'พระบาทสมเด็จพระ…………………… มีพระบรมราชโองการโปรดเกล้าฯ ให้ประกาศว่า', 2), null, insertCommon('proclamation', COMMON_PROCLAIM, 'f-proc')),
         el('div', { class: 'field' },
           el('span', { class: 'lbl', text: 'Reason (โดยที่เป็นการสมควร …)' }),
-          el('div', { class: 'reason-row' }, mode, areaInput('f-topic', 'reasonTopic', 'ว่าด้วย …', 2)),
-          el('span', { class: 'hint', text: 'Prints as “โดยที่เป็นการสมควร” + the choice + “กฎหมายว่าด้วย” + your text.' })),
+          el('div', { class: 'reason-row' }, mode, topic),
+          el('span', { class: 'hint', text: 'Prints “กฎหมายว่าด้วย” + your text. It follows the name until you edit it.' })),
         el('div', { class: 'field' },
-          el('label', { class: 'check' }, rightsBox, el('span', { text: 'Include the rights-limitation paragraphs (มาตรา ๓๒). Untick when the bill does not limit anyone’s rights or liberties.' })),
+          el('label', { class: 'check' }, rightsBox, el('span', { text: 'Include the rights-limitation paragraphs. Untick when the bill does not limit anyone’s rights or liberties.' })),
           rightsBody),
         field('f-enact', 'Enacting clause (just before มาตรา ๑)', areaInput('f-enact', 'enact', 'จึงทรงพระกรุณาโปรดเกล้าฯ ให้ตราพระราชบัญญัติขึ้นไว้โดยคำแนะนำและยินยอมของรัฐสภา ดังต่อไปนี้', 2), null, insertCommon('enact', COMMON_ENACT, 'f-enact'))
       )
@@ -756,16 +759,18 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
   }
   function buildClosing() {
     var host = $('#g-closing'); host.replaceChildren();
-    var box = el('input', { id: 'f-closing', type: 'checkbox', checked: !!cur.closingOn });
-    var body = el('div', { class: 'field', hidden: !cur.closingOn },
-      el('div', { class: 'grid' },
-        field('f-csname', 'Countersigned by (ผู้รับสนอง)', textInput('f-csname', 'csName', 'ชื่อ-สกุล')),
-        field('f-csrole', 'Position (ตำแหน่ง)', textInput('f-csrole', 'csRole', 'นายกรัฐมนตรี'))),
+    var sign = el('input', { id: 'f-sign', type: 'checkbox', checked: !!cur.signOn });
+    var signBody = el('div', { class: 'grid', hidden: !cur.signOn },
+      field('f-csname', 'Countersigned by (ชื่อผู้รับสนอง)', textInput('f-csname', 'csName', 'Leave empty for the dotted line')),
+      field('f-csrole', 'Position (ตำแหน่ง)', textInput('f-csrole', 'csRole', 'นายกรัฐมนตรี')));
+    sign.addEventListener('change', function () { cur.signOn = sign.checked; signBody.hidden = !sign.checked; touch(); });
+    var rem = el('input', { id: 'f-remarkon', type: 'checkbox', checked: !!cur.remarkOn });
+    var remBody = el('div', { class: 'field', hidden: !cur.remarkOn },
       field('f-remark', 'Reason for enactment (หมายเหตุ)', areaInput('f-remark', 'remark', 'ข้อความต่อจาก “…ฉบับนี้ คือ”', 3)));
-    box.addEventListener('change', function () { cur.closingOn = box.checked; body.hidden = !box.checked; touch(); fitAll(); });
-    host.append(title('ท้ายร่าง', 'Optional closing'),
-      el('label', { class: 'check' }, box, el('span', { text: 'Add the countersign block and หมายเหตุ at the end. Your template stops after the last section, so this is off by default.' })),
-      body);
+    rem.addEventListener('change', function () { cur.remarkOn = rem.checked; remBody.hidden = !rem.checked; touch(); fitAll(); });
+    host.append(title('ท้ายร่าง', 'Closing'),
+      el('label', { class: 'check' }, sign, el('span', { text: 'Countersign block (ผู้รับสนองพระบรมราชโองการ)' })), signBody,
+      el('label', { class: 'check' }, rem, el('span', { text: 'หมายเหตุ with the reason for enactment (not in your template)' })), remBody);
   }
 
   function ctlButtons(it, i) {
@@ -827,9 +832,6 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
       else if (k.t === 'dist') host.append(el('p', { class: 'p-dist', text: k.s }));
       else if (k.t === 'sec') host.append(el('p', { class: 'p-sec', text: k.label + '  ' + k.s }));
       else if (k.t === 'cont') host.append(el('p', { class: 'p-sec', text: k.s }));
-      else if (k.t === 'div') host.append(el('div', { class: 'p-div' }, k.s, k.sub ? el('div', { text: k.sub }) : null));
-      else if (k.t === 'sign') host.append(el('div', { class: 'p-sign' }, k.lines.filter(Boolean).map(function (l) { return el('div', { text: l }); })));
-      else if (k.t === 'remark') host.append(el('p', { class: 'p-remark', text: k.s }));
     });
   }
   function showTab(t) {
@@ -846,6 +848,7 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
     updateHeader();
     $('#status').value = cur.status;
     buildDetails(); buildPreamble(); renderItems(); buildClosing();
+    $('#f-space').checked = !!cur.spaceSections;
     $('#copy-fb').hidden = true;
     showTab(tab);
   }
@@ -923,6 +926,7 @@ details.group > .body { display: grid; gap: 14px; margin-top: 14px; }
     delBtn.dataset.armed = '1'; delBtn.textContent = 'Delete this bill?'; delBtn.classList.add('armed');
     delTimer = setTimeout(function () { delete delBtn.dataset.armed; delBtn.textContent = 'Delete'; delBtn.classList.remove('armed'); }, 3000);
   });
+  $('#f-space').addEventListener('change', function (e) { cur.spaceSections = e.target.checked; touch(); });
   $('#add-sec').addEventListener('click', function () { appendItem(newSec('')); });
   $('#add-div').addEventListener('click', function () { appendItem(newDiv('หมวด', '')); });
   $('#add-sub').addEventListener('click', function () { appendItem(newDiv('ส่วน', '')); });
