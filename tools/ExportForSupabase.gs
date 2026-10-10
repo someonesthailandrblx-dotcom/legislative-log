@@ -43,7 +43,7 @@ function exportForSupabase() {
     });
   });
   out.parl_members = rows("Members").map(function (r) {
-    return { pronoun: s(r[0]), name: s(r[1]), position: s(r[3]), party: s(r[4]), mp_type: s(r[5]), in_office: s(r[6]), out_of_office: s(r[7]), picture: s(r[8]), party_color: s(r[9]) };
+    return { pronoun: s(r[0]), name: s(r[1]), position: s(r[2]), party: s(r[3]), mp_type: s(r[4]), in_office: s(r[5]), out_of_office: s(r[6]), picture: s(r[7]), party_color: s(r[8]) };
   });
   out.parl_cabinet = [];
   [["Cabinet", false], ["ShadowCabinet", true]].forEach(function (c) {

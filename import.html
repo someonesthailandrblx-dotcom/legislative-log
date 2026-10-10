@@ -17,6 +17,7 @@ button:disabled{opacity:.5}pre{background:#f3f3f3;border-radius:10px;padding:12p
 <label>Username</label><input id="u" autocomplete="username">
 <label>Password</label><input id="p" type="password" autocomplete="current-password">
 <label>1. Export file (parliament-export.json)</label><input id="f" type="file" accept=".json">
+<label style="display:flex;gap:8px;align-items:center;font-weight:400"><input id="rep" type="checkbox" style="width:auto"> Replace existing data (deletes rows in the tables below first)</label>
 <button id="go">Import</button><pre id="log">Waiting…</pre></div>
 <script>
 const L=document.getElementById('log');let first=true;const log=t=>{if(first){L.textContent='';first=false}L.textContent+=t+'\n'};
@@ -34,7 +35,8 @@ document.getElementById('go').onclick=async()=>{
       const rows=d[t]||[];
       const c=await sb.from(t).select('id',{count:'exact',head:true});
       if(c.error){log(t+': '+c.error.message);continue}
-      if(c.count>0){log(t+': already has '+c.count+' rows, skipped');continue}
+      if(c.count>0&&!rep.checked){log(t+': already has '+c.count+' rows, skipped');continue}
+      if(c.count>0){const de=(await sb.from(t).delete().gt('id',0)).error;if(de){log(t+' delete ERROR: '+de.message);continue}log(t+': removed '+c.count+' old rows')}
       for(let i=0;i<rows.length;i+=200){
         const e=(await sb.from(t).insert(rows.slice(i,i+200))).error;
         if(e){log(t+' ERROR: '+e.message);break}
